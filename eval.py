@@ -1,7 +1,7 @@
 """Mini eval harness: vet visit transcript -> SOAP note (JSON) -> code-based checks.
 
 Usage:
-    pip install anthropic          # and export ANTHROPIC_API_KEY=...
+    pip install anthropic python-dotenv   # put ANTHROPIC_API_KEY=... in .env
     python eval.py run v1          # run every case with prompt v1, save results/v1.json
     python eval.py run v2          # same with prompt v2
     python eval.py compare v1 v2   # which cases got fixed / broke between the two runs
@@ -14,6 +14,9 @@ import sys
 from pathlib import Path
 
 import anthropic
+from dotenv import load_dotenv
+
+load_dotenv()  # picks up ANTHROPIC_API_KEY from .env
 
 MODEL = "claude-haiku-4-5"
 RESULTS_DIR = Path(__file__).parent / "results"
@@ -245,11 +248,13 @@ def generate_note(transcript: str, system_prompt: str) -> dict:
     response = client.messages.create(
         model=MODEL,
         max_tokens=2000,
-        temperature=0,  # reduce run-to-run noise so v1 vs v2 differences mean something
         system=system_prompt,
         tools=[SOAP_TOOL],
         tool_choice={"type": "tool", "name": "write_soap_note"},
         messages=[{"role": "user", "content": transcript}],
+        # SDK 1.x dropped the temperature kwarg, but Haiku 4.5 still honors it.
+        # temperature=0 reduces run-to-run noise so v1 vs v2 differences mean something.
+        extra_body={"temperature": 0},
     )
     if response.stop_reason == "max_tokens":
         raise RuntimeError("hit max_tokens; tool input is truncated")
